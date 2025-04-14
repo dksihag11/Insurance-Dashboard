@@ -1,0 +1,282 @@
+Q.1 SELECT employeeNumber, firstName, lastName
+FROM employees
+WHERE jobTitle = 'Sales Rep'
+AND reportsTo = 1102;
+
+
+SELECT DISTINCT productline
+FROM products
+WHERE productline LIKE '%cars';
+
+Q.2  SELECT customerNumber, customerName,
+       CASE
+           WHEN country IN ('USA', 'Canada') THEN 'North America'
+           WHEN country IN ('UK', 'France', 'Germany') THEN 'Europe'
+           ELSE 'Other'
+       END AS CustomerSegment
+FROM customers;
+
+Q.3 SELECT 
+    productCode,
+    SUM(quantityOrdered) AS totalQuantity
+FROM 
+    OrderDetails
+GROUP BY 
+    productCode
+ORDER BY 
+    totalQuantity DESC
+LIMIT 10;
+
+SELECT 
+    MONTHNAME(paymentDate) AS monthName,
+    COUNT(amount) AS totalPayments
+FROM 
+    Payments
+GROUP BY 
+    monthName
+HAVING 
+    COUNT(amount) > 20
+ORDER BY 
+    totalPayments DESC;
+
+Q.4 USE customers_Orders;
+
+CREATE TABLE Customers (
+    customer_id INT AUTO_INCREMENT PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    phone_number VARCHAR(20)
+);
+
+
+CREATE TABLE Orders (
+    order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
+    order_date DATE,
+    total_amount DECIMAL(10, 2),
+    FOREIGN KEY (customer_id) REFERENCES Customers(customer_id),
+    CHECK (total_amount > 0)
+);
+
+Q.5 USE classicmodels;
+
+SELECT 
+    c.country, 
+    COUNT(o.orderNumber) AS orderCount
+FROM 
+    Customers c
+JOIN 
+    Orders o ON c.customerNumber = o.customerNumber
+GROUP BY 
+    c.country
+ORDER BY 
+    orderCount DESC
+LIMIT 5;
+
+Q.6 CREATE TABLE project (
+    EmployeeID INT PRIMARY KEY AUTO_INCREMENT,
+    FullName VARCHAR(50) NOT NULL,
+    Gender ENUM('Male', 'Female'),
+    ManagerID INT
+);
+
+INSERT INTO project (FullName, Gender, ManagerID)
+VALUES 
+('Dinesh Sihag', 'Male', 3),
+('Rahul More', 'Female', 3),
+('Anand Misal', 'Male', 2),
+('Elon Musk', 'Male', 3),
+('Akhil Shetty', 'Male', 4);
+
+SELECT e.FullName AS EmployeeName, m.FullName AS ManagerName
+FROM project e
+LEFT JOIN project m ON e.ManagerID = m.EmployeeID;
+
+
+Q.7 CREATE TABLE facility (
+    Facility_ID INT,
+    Name VARCHAR(255),
+    State VARCHAR(255),
+    Country VARCHAR(255)
+);
+
+ALTER TABLE facility
+MODIFY COLUMN Facility_ID INT AUTO_INCREMENT PRIMARY KEY;
+
+ALTER TABLE facility
+ADD COLUMN city VARCHAR(255) NOT NULL AFTER Name;
+
+Q.8 SELECT
+    pl.productLine, 
+    SUM(od.quantityOrdered * od.priceEach) AS total_sales, 
+    COUNT(DISTINCT o.orderNumber) AS number_of_orders
+FROM 
+    productlines pl
+JOIN 
+    products p ON pl.productLine = p.productLine
+JOIN 
+    orderdetails od ON p.productCode = od.productCode
+JOIN 
+    orders o ON od.orderNumber = o.orderNumber
+GROUP BY 
+    pl.productLine;
+
+Q.9 CREATE PROCEDURE Get_country_payments
+    @year INT,
+    @country VARCHAR(100)
+AS
+BEGIN
+    -- Declare a variable to hold the total payment amount
+    DECLARE @totalAmount DECIMAL(18, 2);
+
+    -- Calculate the total payment amount for the given year and country
+    SELECT @totalAmount = SUM(p.amount)
+    FROM Payments p
+    JOIN Customers c ON p.customer_id = c.customer_id
+    WHERE YEAR(p.payment_date) = @year
+    AND c.country = @country;
+
+    -- Return the total amount formatted to the nearest thousand (K)
+    IF @totalAmount IS NOT NULL
+    BEGIN
+        -- Formatting the total amount in thousands (K)
+        SELECT CONVERT(VARCHAR(20), ROUND(@totalAmount / 1000.0, 0)) + 'K' AS TotalAmountInK;
+    END
+    ELSE
+    BEGIN
+        SELECT 'No payments found for the given year and country.' AS Message;
+    END
+END;
+
+CALL Get_country_payments(2023, 'USA');
+
+Q.10 WITH CustomerOrderCount AS (
+    SELECT
+        o.customer_id,
+        COUNT(o.order_id) AS order_count
+    FROM
+        Orders o
+    GROUP BY
+        o.customer_id
+)
+SELECT
+    c.customer_id,
+    coc.order_count,
+    RANK() OVER (ORDER BY coc.order_count DESC) AS order_rank
+FROM
+    CustomerOrderCount coc
+JOIN
+    Customers c ON c.customer_id = coc.customer_id
+ORDER BY
+    coc.order_count DESC;
+    
+    WITH YearMonthOrderCount AS (
+    SELECT
+        EXTRACT(YEAR FROM o.order_date) AS year,
+        TO_CHAR(o.order_date, 'Month') AS month_name,
+        COUNT(o.order_id) AS order_count
+    FROM
+        Orders o
+    GROUP BY
+        EXTRACT(YEAR FROM o.order_date),
+        TO_CHAR(o.order_date, 'Month')
+),
+YoYCalculation AS (
+    SELECT
+        y.year,
+        y.month_name,
+        y.order_count,
+        LAG(y.order_count) OVER (PARTITION BY y.month_name ORDER BY y.year) AS prev_year_order_count
+    FROM
+        YearMonthOrderCount y
+)
+SELECT
+    year,
+    month_name,
+    order_count,
+    CASE
+        WHEN prev_year_order_count IS NULL THEN 'N/A'
+        ELSE 
+            TO_CHAR(((order_count - prev_year_order_count) / prev_year_order_count::FLOAT) * 100, 'FM999999999') || '%'
+    END AS yoy_percentage_change
+FROM
+    YoYCalculation
+ORDER BY
+    year DESC, 
+    TO_DATE(month_name, 'Month');
+
+Q.11 SELECT product_line, COUNT(*) AS product_count
+FROM products, 
+WHERE buy_price > AverageBuyPrice.avg_buy_price
+GROUP BY product_line;
+
+Q.12 CREATE TABLE Emp_EH (
+    EmpID INT PRIMARY KEY,
+    EmpName VARCHAR(100),
+    EmailAddress VARCHAR(100)
+);
+
+DELIMITER $$
+
+CREATE PROCEDURE InsertEmp_EH(
+    IN p_EmpID INT,
+    IN p_EmpName VARCHAR(100),
+    IN p_EmailAddress VARCHAR(100)
+)
+BEGIN
+    -- Declare a variable for handling errors
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        -- Display the error message if any exception occurs
+        SELECT 'Error occurred' AS ErrorMessage;
+    END;
+
+    -- Insert the provided values into the Emp_EH table
+    INSERT INTO Emp_EH (EmpID, EmpName, EmailAddress)
+    VALUES (p_EmpID, p_EmpName, p_EmailAddress);
+
+    -- Success message
+    SELECT 'Employee inserted successfully' AS SuccessMessage;
+END $$
+
+DELIMITER ;
+
+CALL InsertEmp_EH(1, 'John Doe', 'john.doe@example.com');
+
+
+Q.13 CREATE TABLE Emp_BIT (
+    Name VARCHAR(100),
+    Occupation VARCHAR(100),
+    Working_date DATE,
+    Working_hours INT
+);
+
+INSERT INTO Emp_BIT VALUES
+('Robin', 'Scientist', '2020-10-04', 12),  
+('Warner', 'Engineer', '2020-10-04', 10),  
+('Peter', 'Actor', '2020-10-04', 13),  
+('Marco', 'Doctor', '2020-10-04', 14),  
+('Brayden', 'Teacher', '2020-10-04', 12),  
+('Antonio', 'Business', '2020-10-04', 11);
+
+
+DELIMITER $$
+
+CREATE TRIGGER before_insert_emp_bit
+BEFORE INSERT ON Emp_BIT
+FOR EACH ROW
+BEGIN
+    -- Check if Working_hours is negative and convert it to positive
+    IF NEW.Working_hours < 0 THEN
+        SET NEW.Working_hours = ABS(NEW.Working_hours);
+    END IF;
+END $$
+
+DELIMITER ;
+
+INSERT INTO Emp_BIT VALUES
+('John', 'Driver', '2025-02-05', -9);  -- This will insert as 9
+
+
+  
